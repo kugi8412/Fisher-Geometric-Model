@@ -1,24 +1,15 @@
 # mutation.py
 
-import numpy as np
-
-def mutate_individual(individual, mu, mu_c, xi):
-    """
-    Mutacja osobnika: 
-      - Z prawdopodobieństwem mu osobnik ulega mutacji
-      - Każda cecha p_i mutuje niezależnie z prawdopodobieństwem mu_c
-      - Zmiana mutacyjna jest losowana z N(0, xi^2)
-    """
-    if np.random.rand() < mu:
-        phenotype = individual.get_phenotype().copy()
-        for i in range(len(phenotype)):
-            if np.random.rand() < mu_c:
-                phenotype[i] += np.random.normal(0.0, xi)
-        individual.set_phenotype(phenotype)
+import torch
 
 def mutate_population(population, mu, mu_c, xi):
     """
-    Mutuje całą populację (lista osobników).
+    Mutuje całą populację.
     """
-    for ind in population.get_individuals():
-        mutate_individual(ind, mu, mu_c, xi)
+    individuals = population.get_individuals()
+    mutation = torch.distributions.Normal(loc=torch.tensor([0.0]), scale=torch.tensor([xi])).sample(individuals.shape).squeeze(2)
+    mutate_ind = (torch.rand(individuals.shape[0]) < mu).unsqueeze(1).expand(-1,individuals.shape[1])
+    mutate_gene = torch.rand(individuals.shape) < mu_c
+    individuals = torch.masked_scatter(individuals, torch.logical_and(mutate_ind, mutate_gene), individuals+mutation)
+    population.set_individuals(individuals)
+

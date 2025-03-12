@@ -1,6 +1,6 @@
 # environment.py
 
-import numpy as np
+import torch
 
 class Environment:
     """
@@ -23,8 +23,8 @@ class Environment:
         alpha(t) = alpha(t-1) + N(c, delta^2 I)
         """
         n = len(self.alpha)
-        random_shift = np.random.normal(loc=self.c, scale=self.delta, size=n)
-        self.alpha = self.alpha + random_shift
+        random_shift = torch.normal(self.c, self.delta)
+        self.alpha = (self.alpha + random_shift).abs()
 
     def get_optimal_phenotype(self):
         return self.alpha

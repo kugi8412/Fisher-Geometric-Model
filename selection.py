@@ -1,8 +1,8 @@
 # selection.py
 
-import numpy as np
+import torch
 
-def fitness_function(phenotype, alpha, sigma):
+def fitness_function(phenotype, alpha, sigma) -> torch.Tensor:
     """
     Funkcja fitness: phi_alpha(p) = exp( -||p - alpha||^2 / (2*sigma^2) )
     :param phenotype: fenotyp osobnika (np.array)
@@ -10,42 +10,17 @@ def fitness_function(phenotype, alpha, sigma):
     :param sigma: odchylenie (float) kontrolujące siłę selekcji
     """
     diff = phenotype - alpha
-    dist_sq = np.sum(diff**2)
-    return np.exp(-dist_sq / (2 * sigma**2))
+    dist_sq = torch.sum(diff**2, dim=1)
+    return torch.exp(-dist_sq / (2 * sigma**2))
 
-def proportional_selection(population, alpha, sigma, N):
-    """
-    Model proporcjonalny: 
-      - P(rozmnożenia) = fitness / suma fitnessów
-      - Generujemy nową populację wielkości N.
-    """
+def selection(population, alpha, sigma, N, threshold):
     individuals = population.get_individuals()
-    fitnesses = [fitness_function(ind.get_phenotype(), alpha, sigma) for ind in individuals]
-    total_fitness = sum(fitnesses)
-    if total_fitness == 0:
-        # Jeśli całkowite fitness jest 0, to każdy osobnik dostaje równą szansę
-        probabilities = [1.0 / len(individuals)] * len(individuals)
+    fitnesses = fitness_function(individuals, alpha, sigma)
+    if fitnesses.sum() == 0:
+        probabilities = torch.tensor([1/len(fitnesses)]*len(fitnesses))
     else:
-        probabilities = [f / total_fitness for f in fitnesses]
-
-    new_individuals = []
-    for _ in range(N):
-        chosen_idx = np.random.choice(range(len(individuals)), p=probabilities)
-        new_individuals.append(individuals[chosen_idx])
-
-    population.set_individuals(new_individuals)
-
-def threshold_selection(population, alpha, sigma, threshold):
-    """
-    Model progowy:
-      - Eliminujemy osobniki, których fitness < threshold.
-      - Pozostałe przechodzą do kolejnej fazy (o ile nie przekroczymy N).
-      - Jeśli liczba ocalałych > N, wtedy dodatkowa redukcja.
-    """
-    individuals = population.get_individuals()
-    survivors = []
-    for ind in individuals:
-        f = fitness_function(ind.get_phenotype(), alpha, sigma)
-        if f >= threshold:
-            survivors.append(ind)
-    return survivors
+        probabilities = fitnesses / fitnesses.sum()
+    new_individuals = individuals[torch.multinomial(probabilities, num_samples=individuals.shape[0])]
+    # aktualnie osobniki umierające w danym kroku mogą nadal się rozmnażać, można to zmienić ale nie wiem czy ma to istotne znaczenie
+    individuals = torch.masked_scatter(individuals, fitnesses.unsqueeze(1).expand(-1,individuals.shape[1]) < threshold, new_individuals)
+    return individuals
