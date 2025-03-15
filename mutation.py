@@ -12,4 +12,3 @@ def mutate_population(population, mu, mu_c, xi):
     mutate_gene = torch.rand(individuals.shape) < mu_c
     individuals = torch.masked_scatter(individuals, torch.logical_and(mutate_ind, mutate_gene), individuals+mutation)
     population.set_individuals(individuals)
-
