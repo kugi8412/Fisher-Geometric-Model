@@ -1,35 +1,113 @@
 import torch
+import numpy as np
 import streamlit as st
-from population import Population
-from reproduction import sexual_reproduction
+import matplotlib.pyplot as plt
 from mutation import mutate_population
-from selection import selection
+from reproduction import reproduce
+from environment import FisherEnvironment
+from visualization import plot_phenotype_space, plot_reproduction_space, plot_gene_history
+from selection import apply_fitness_selection
+
+def generate_phenotype_matrix(n_genes: int, device: torch.device) -> torch.Tensor:
+    """Dynamicznie generuje macierz transformacji genotyp->fenotyp"""
+    mid = n_genes // 2
+    matrix = torch.zeros((n_genes - 1, 2), device=device)  # Excluding the sex gene
+    matrix[:mid, 0] = 1.0  # First half affects first phenotype dimension
+    matrix[mid:, 1] = 1.0  # Second half affects second phenotype dimension
+    return matrix
+
+def run_simulation(params):
+    device = params['device']
+    env = FisherEnvironment(params, device)
+    
+    gene_history = np.zeros((params['steps'], params['n_genes'] - 1))  # Track gene changes over time
+    
+    pheno_container = st.empty()
+    repro_container = st.empty()
+    gene_container = st.empty()
+    
+    for step in range(params['steps']):
+        # Compute phenotypes based on genotypes
+        phenos = env.population.get_phenotypes(params['phenotype_matrix'])
+        
+        # Movement: individuals move based on their speed (phenotype component 0)
+        angles = torch.rand(env.population.size, device=device) * 2 * torch.pi
+        dx = phenos[:, 0] * torch.cos(angles)
+        dy = phenos[:, 0] * torch.sin(angles)
+        displacement = torch.stack([dx, dy], dim=1)
+        env.population.update_positions(displacement)
+
+        # Mutation
+        mutate_population(env.population, params['mutation_rate'], params['gene_mutation_rate'], params['mutation_strength'])
+
+        # Selection – fitness-based
+        apply_fitness_selection(env)
+        if env.population.size < 2:
+            st.warning("Zbyt mało osobników – symulacja zakończona.")
+            break
+
+        # Reproduction
+        reproduce(env)
+
+        # Update environment optimum
+        env.update_optimal()
+
+        # Log gene history
+        gene_history[step] = env.population.genotypes[:, :-1, :].mean(dim=(0, 2)).detach().cpu().numpy()
+
+        # Generate and display plots
+        fig_pheno = plot_phenotype_space(env.population)
+        fig_repro = plot_reproduction_space(env.population)
+        fig_genes = plot_gene_history(gene_history[:step])
+
+        pheno_container.pyplot(fig_pheno)
+        repro_container.pyplot(fig_repro)
+        gene_container.pyplot(fig_genes, use_container_width=True)
+
+    return env, gene_history
 
 def main():
-    st.title("Symulacja Ewolucji Płciowej")
+    st.title("Symulacja Ewolucji Fisherowskiej (Live Updates)")
+    st.markdown("""
+    Symulacja z live-updated plots.
+    
+    Każdy osobnik ma 11 genów (0..9 – fenotypowe, 10 – płciowy).  
+    Fenotyp (prędkość i promień rozmnażania) obliczany jest na podstawie sumy genów – 
+    dzielimy 10 genów na dwie grupy (po 5 na oś). Maksymalna wartość na osi wynosi 5.
+    Optimum porusza się zgodnie z rozkładem normalnym (parametry dryfu i szumu podawane są przez użytkownika).
+    """)
+
+    # Device selection
+    if torch.cuda.is_available():
+        device_options = ['CPU', 'GPU']
+        default_device = 'GPU'
+    else:
+        device_options = ['CPU']
+        default_device = 'CPU'
+    
+    selected_device = st.sidebar.radio("Wybierz urządzenie", device_options, index=device_options.index(default_device))
+    device = torch.device('cuda' if selected_device == 'GPU' else 'cpu')
 
     params = {
-        'n_organisms': st.sidebar.slider("Liczba organizmów", 10, 1000, 200),
-        'n_genes': st.sidebar.slider("Liczba genów", 1, 50, 10),
-        'mutation_rate': st.sidebar.slider("Częstość mutacji", 0.0, 1.0, 0.1),
-        'mutation_strength': st.sidebar.slider("Siła mutacji", 0.0, 1.0, 0.05),
-        'speed': st.sidebar.slider("Prędkość poruszania się", 0.0, 1.0, 0.1),
-        'max_population': st.sidebar.slider("Maksymalna liczba osobników", 100, 5000, 1000),
-        'steps': st.sidebar.slider("Liczba pokoleń", 10, 500, 100),
-        'mutations_probability': st.sidebar.slider("Prawdopodobieństwo mutacji", 0.0, 1.0, 0.10)
+        'device': device,
+        'n_organisms': st.sidebar.slider("Liczba organizmów", 100, 10000, 2000),
+        'n_genes': 11,
+        'area_width': st.sidebar.slider("Szerokość obszaru (pozycje)", 10, 100, 10),
+        'area_height': st.sidebar.slider("Wysokość obszaru (pozycje)", 10, 100, 10),
+        'selection': st.sidebar.slider("Siła selekcji (sigma)", 0.1, 10.0, 2.0),
+        'opt_drift': st.sidebar.slider("Dryf optimum", 0.0, 2.0, 0.05),
+        'opt_noise': st.sidebar.slider("Szum optimum", 0.0, 1.0, 0.1),
+        'steps': st.sidebar.slider("Liczba pokoleń", 10, 1000, 500),
+        'mutation_rate': st.sidebar.slider("Prawdopodobieństwo mutacji", 0.0, 1.0, 0.6),
+        'gene_mutation_rate': st.sidebar.slider("Prawdopodobieństwo mutacji genu", 0.0, 1.0, 0.6),
+        'mutation_strength': st.sidebar.slider("Siła mutacji", 0.0, 1.0, 0.2),
+        'phenotype_matrix': generate_phenotype_matrix(11, device)
     }
-
+    
     if st.button("Start symulacji"):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        pop = Population(params['n_organisms'], params['n_genes'], device)
-
-        for step in range(params['steps']):
-            pop.move_population(params['speed'])
-            mutate_population(pop, params['mutation_rate'], params['mutation_strength'], params['mutations_probability'])
-            selection(pop, params['alpha'], params['sigma'],  params['max_population'])
-            sexual_reproduction(pop, params['alpha'], params['sigma'], params['max_population'])
-
+        with st.spinner("Symulacja w toku..."):
+            env, gene_history = run_simulation(params)
         st.success("Symulacja zakończona!")
-
+        
 if __name__ == "__main__":
     main()

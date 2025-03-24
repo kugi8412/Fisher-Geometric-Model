@@ -1,46 +1,50 @@
 import torch
-from individual import Individual
-from scipy.spatial import KDTree
 
-def sexual_reproduction(population, max_size):
-    """
-    Rozmnażanie płciowe: każdy osobnik szuka partnera w pobliżu za pomocą KDTree.
+def reproduce(env):
+    pop = env.population
+    device = pop.device
 
-    - Samce i samice są rozdzielone i zapisane w KDTree.
-    - Dla każdego samca wybieramy najbliższą samicę.
-    - Tworzymy nowego osobnika metodą crossing-over.
-    """
-    males = [ind for ind in population.individuals if ind.sex == 1]
-    females = [ind for ind in population.individuals if ind.sex == 0]
+    # Get masks for females and males
+    female_mask = pop.get_sex_mask()
+    male_mask = ~female_mask  # Opposite of female mask
+    
+    if female_mask.sum() == 0 or male_mask.sum() == 0:
+        return  # No reproduction possible
 
-    if not males or not females:
-        return
+    females_pos = pop.positions[female_mask]
+    males_pos = pop.positions[male_mask]
 
-    male_positions = torch.stack([m.position for m in males]).cpu().numpy()
-    female_positions = torch.stack([f.position for f in females]).cpu().numpy()
+    # Compute pairwise Euclidean distances using cdist
+    dists = torch.cdist(females_pos, males_pos)
 
-    kdtree = KDTree(female_positions)  # Gogolewski KDETree
+    # Find nearest male for each female
+    min_dists, male_indices = torch.min(dists, dim=1)
 
-    new_individuals = []
-    for male in males:
-        dist, index = kdtree.query(male_positions)
-        female = females[index]
+    # Compute reproduction probabilities
+    phenotypes = pop.get_phenotypes(env.params['phenotype_matrix'])
+    female_radii = phenotypes[female_mask, 1]  # Reproduction range
+    max_population = 2 * env.params['n_organisms']
+    reproduction_prob = 1 - pop.size / max_population
 
-        # Tworzymy potomka metodą crossing-over
-        offspring_genotype = torch.zeros_like(male.genotype)
-        for gene_idx in range(population.n_genes):
-            pick_parent1 = torch.randint(0, 2, (1,)).item()
-            pick_parent2 = torch.randint(0, 2, (1,)).item()
-            offspring_genotype[gene_idx, 0] = male.genotype[gene_idx, pick_parent1]
-            offspring_genotype[gene_idx, 1] = female.genotype[gene_idx, pick_parent2]
+    is_reproducing = (min_dists < female_radii) & (torch.rand(len(min_dists), device=device) < reproduction_prob)
 
-        # Losowanie płci
-        offspring_sex = torch.randint(0, 2, (1,)).item()
-        offspring_position = (male.position + female.position) / 2.0
+    if is_reproducing.any():
+        # Crossing over: Randomly take alleles from parents
+        female_genotypes = pop.genotypes[female_mask][is_reproducing]
+        male_genotypes = pop.genotypes[male_mask][male_indices[is_reproducing]]
 
-        new_individuals.append(Individual(offspring_genotype, offspring_position, offspring_sex))
+        take_f_allele = torch.rand((is_reproducing.sum(), pop.n_genes-1, 2), device=device) < 0.5
+        new_genotypes = torch.where(take_f_allele, female_genotypes[:, :-1, :], male_genotypes[:, :-1, :])
 
-    # Dodajemy nowych osobników ograniczając ich liczbę
-    population.individuals += new_individuals
-    population.individuals = population.individuals[:max_size]
-    population.size = len(population.individuals)
+        # Set last gene (sex)
+        new_sex_values = torch.randint(0, 2, (is_reproducing.sum(), 1), device=device)
+        new_sex = new_sex_values.unsqueeze(2).expand(-1, -1, 2)
+        new_genotypes = torch.cat([new_genotypes, new_sex], dim=1)
+
+        # Compute new positions (midpoint of parents)
+        new_positions = (pop.positions[female_mask][is_reproducing] + pop.positions[male_mask][male_indices[is_reproducing]]) / 2
+
+        # Update population
+        pop.genotypes = torch.cat([pop.genotypes, new_genotypes], dim=0)
+        pop.positions = torch.cat([pop.positions, new_positions], dim=0)
+        pop.size = pop.genotypes.shape[0]

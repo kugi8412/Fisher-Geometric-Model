@@ -1,5 +1,6 @@
 import torch
 
+
 def fitness_function(phenotype, alpha, sigma) -> torch.Tensor:
     """
     Funkcja fitness: phi_alpha(p) = exp( -||p - alpha||^2 / (2*sigma^2) )
@@ -41,3 +42,18 @@ def selection(population, alpha, sigma, max_population):
     # Aktualizacja populacji - tylko ocalałe osobniki
     population.individuals = survivors
     population.size = len(survivors)
+
+def apply_fitness_selection(env):
+    """
+    Usuwa osobniki z prawdopodobieństwem zależnym (1 - fitness)
+    """
+    fitnesses = env.calculate_fitness()
+    device = fitnesses.device
+    
+    # Create survival mask on correct device
+    survives = fitnesses > torch.rand(fitnesses.shape, device=device)
+    
+    # Apply mask
+    env.population.genotypes = env.population.genotypes[survives]
+    env.population.positions = env.population.positions[survives]
+    env.population.size = env.population.genotypes.shape[0]

@@ -1,42 +1,46 @@
 import torch
-from individual import Individual
 
 class Population:
-    def __init__(self, size, n_genes, device):
-        """
-        Inicjalizuje populację losowymi osobnikami.
-
-        :param size: liczba osobników
-        :param n_genes: liczba genów
+    def __init__(self,
+                 size: int,
+                 n_genes: int,
+                 area_width: int,
+                 area_height: int,
+                 device: str):
+        """ Klasa przechowująca wszystkie
+        osobniki w jednej macierzy.
         """
         self.size = size
         self.n_genes = n_genes
+        self.area_width = area_width
+        self.area_height = area_height
         self.device = device
-        # CHANGE, potrzebuję położenia osobników, 
-        # self.individuals = torch.randn((size, n_genes)).abs()
-
-        self.individuals = []
-        for _ in range(size):
-            genotype = torch.rand(n_genes, 2, device=device)  # Genotyp (n_genes, 2)
-            position = torch.rand(2, device=device) * 10.0  # Pozycja (x, y)
-            sex = torch.randint(0, 2, (1,)).item()  # Płeć (0 - samica, 1 - samiec)
-            self.individuals.append(Individual(genotype, position, sex))
-
-    def move_population(self, speed):
+        
+        # Inicjalizacja genotypu osobników z ostanim genem determinującym płeć
+        self.genotypes = torch.rand(size, n_genes-1, 2, device=device)
+        last_gene_values = torch.randint(0, 2, (size, 1), device=device)
+        last_gene = last_gene_values.unsqueeze(2).expand(-1, -1, 2)
+        self.genotypes = torch.cat([self.genotypes, last_gene], dim=1)
+        
+        # Inicjalizacja początkowej położenia osobników
+        self.positions = torch.rand(size, 2, device=device) * torch.tensor(
+            [area_width, area_height], device=device)
+    
+    def get_phenotypes(self, gen_to_phen: torch.tensor):
+        """ Metoda oblicza fenotyp z uwzględnieniem wag genów
         """
-        Przesuwa całą populację o losowe wartości w przestrzeni.
+        return torch.matmul(self.genotypes[:,:-1].mean(-1), gen_to_phen)
+    
+    def update_positions(self, displacement: torch.tensor):
+        """ Metoda aktualizuje położenie osobników.
+        Zakłądamy, że plansza jest torusem w R^2.
         """
-        for ind in self.individuals:
-            ind.move(speed)
+        self.positions = (self.positions + displacement) % torch.tensor(
+            [self.area_width, self.area_height], device=self.device)
 
-    def get_positions(self):
+    def get_sex_mask(self):
+        """ Metoda zwraca maskę,
+        gdzie True to kobieta, a False to Mężczyzna.
+        (Dwa zera to kobieta, dwie jedynki to mężczyzna)
         """
-        Zwraca tensor pozycji wszystkich osobników.
-        """
-        return torch.stack([ind.position for ind in self.individuals])
-
-    def get_individuals(self):
-        return self.individuals
-
-    def set_individuals(self, new_individuals):
-        self.individuals = new_individuals
+        return self.genotypes[:, -1, 0] < 0.5
