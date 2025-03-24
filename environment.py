@@ -10,7 +10,7 @@ class FisherEnvironment:
         self.pop = Population(params['n_organisms'], params['n_genes'], device, self.area_width, self.area_height)
         # Początkowe optimum fenotypowe – losujemy z przedziału [0, maksymalna wartość] dla każdej osi.
         # Maksymalna wartość dla jednej osi przy 10 genach fenotypowych wynosi 5.
-        self.optimal = torch.rand(2, device=device) #* ((params['n_genes'] - 1)/2)
+        self.optimal = torch.rand(2, device=device) * ((params['n_genes'] - 1)/2)
     
     def update_optimal(self):
         # Optimum porusza się zgodnie z rozkładem normalnym – parametry podawane w params
