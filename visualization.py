@@ -26,33 +26,29 @@ def save_frames_as_gif(frames, filename="animation.gif", duration=0.2):
         for frame in frames:
             writer.append_data(frame)
 
-def plot_phenotype_space(pop, save_frames=False):
-    """ Plots phenotype space and optionally saves frames for a GIF. """
-    phenos = pop.get_phenotypes().detach().cpu().numpy()
-    opt = pop.optimal_genotype.mean(dim=-1).detach().cpu().numpy()
-
+def plot_phenotype_space(env):
+    phenos = env.population.get_phenotypes().detach().cpu().numpy()
+    opt = env.get_optimal_phenotype().detach().cpu().numpy()
+    
     fig, ax = plt.subplots()
-    ax.scatter(phenos[:, 0], phenos[:, 1], alpha=0.7)
+    ax.scatter(phenos[:, 0], phenos[:, 1], alpha=0.5)
     ax.scatter(opt[0], opt[1], color='red', marker='X', s=150)
-
-    max_pheno = (pop.n_genes - 1) // 2
+    
+    # Dynamiczny zakres osi na podstawie liczby genów
+    max_pheno = (env.params['n_genes'] - 1) // 2
     ax.set_xlim(0, max_pheno)
     ax.set_ylim(0, max_pheno)
-    ax.set_title("Phenotype Space")
-
-    if save_frames:
-        plt.savefig("frames/frame_phenotype.png", dpi=100)
     
     return fig
 
-def plot_reproduction_space(pop, save_frames=False):
+def plot_reproduction_space(env, save_frames=False):
     """ Plots reproduction space and optionally saves frames for a GIF. """
-    positions = pop.positions.detach().cpu().numpy()
+    positions = env.population.positions.detach().cpu().numpy()
     
     fig, ax = plt.subplots()
     ax.scatter(positions[:, 0], positions[:, 1], alpha=0.7, label="Positions")
-    ax.set_xlim(0, pop.area_width)
-    ax.set_ylim(0, pop.area_height)
+    ax.set_xlim(0, env.population.area_width)
+    ax.set_ylim(0, env.population.area_height)
     ax.set_title("Physical Reproduction Space")
     ax.legend()
 

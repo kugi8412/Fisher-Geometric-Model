@@ -16,6 +16,7 @@ class FisherEnvironment:
             params['n_genes'],
             params['area_width'],
             params['area_height'],
+            params['phenotype_matrix'],
             device
         )
         
@@ -31,7 +32,7 @@ class FisherEnvironment:
         """ Metoda służąca obliczeniu prawdopodobieństwa przeżycia
         każdego osobnika znajdującego się w populacji.
         """
-        phenos = self.population.get_phenotypes(self.params['phenotype_matrix'])
+        phenos = self.population.get_phenotypes()
         optimal_pheno = self.get_optimal_phenotype()
         
         # Wyliczenia prawdopodobieństwa przeżycia z rozkładu normalnego

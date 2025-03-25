@@ -48,12 +48,9 @@ def apply_fitness_selection(env):
     Usuwa osobniki z prawdopodobieństwem zależnym (1 - fitness)
     """
     fitnesses = env.calculate_fitness()
-    device = fitnesses.device
+    mask = fitnesses > torch.rand_like(fitnesses)
     
-    # Create survival mask on correct device
-    survives = fitnesses > torch.rand(fitnesses.shape, device=device)
-    
-    # Apply mask
-    env.population.genotypes = env.population.genotypes[survives]
-    env.population.positions = env.population.positions[survives]
+    # Bezpieczne aktualizacje
+    env.population.genotypes = env.population.genotypes[mask]
+    env.population.positions = env.population.positions[mask]
     env.population.size = env.population.genotypes.shape[0]
