@@ -1,14 +1,21 @@
+# mutation.py
+
 import torch
 
-def mutate_population(pop, mutation_rate, mutation_strength):
+def mutate_population(pop, mutation_rate, gene_mutation_rate, mutation_strength):
+    pop.genotypes = mutate_genotypes(pop.genotypes, mutation_rate, gene_mutation_rate, mutation_strength)
+
+def mutate_genotypes(genotype, mutation_rate, gene_mutation_rate, mutation_strength):
     """
-    Mutuje tylko geny fenotypowe (indeksy 0..n_genes-2).
-    Dodaje szum; wynik "zawija" się modulo 1, bo wartości genów są w [0,1].
+    Mutuje tylko geny fenotypowe (:,:-1,:).
+    Dodaje szum; wynik jest obcinany do [0,1].
     """
-    for ind in pop.individuals:
-        for j in range(0, pop.n_genes - 1):
-            for allele in range(2):
-                if torch.rand(1).item() < mutation_rate:
-                    noise = torch.randn(1).item() * mutation_strength
-                    new_val = ind.genotype[j, allele].item() + noise
-                    ind.genotype[j, allele] = new_val % 1.0
+    mutation = torch.distributions.Normal(loc=torch.tensor([0.0], device=genotype.device), 
+                                          scale=torch.tensor([mutation_strength], device=genotype.device)).sample(genotype.shape).squeeze(-1)
+
+    # Mutacje zachodzą z prawdopodobieństwem, z wyłączeniem płci (n_org, n_genes, 2)
+    mutation[:,-1,:] = 0.0
+    mutate_ind = (torch.rand(genotype.shape[0], device=genotype.device)
+                  < mutation_rate).unsqueeze(1).unsqueeze(2).expand(-1,genotype.shape[1],2)
+    mutate_gene = torch.rand(genotype.shape, device=genotype.device) < gene_mutation_rate
+    return (genotype + mutation * torch.logical_and(mutate_ind, mutate_gene).float()).clamp(0,1)

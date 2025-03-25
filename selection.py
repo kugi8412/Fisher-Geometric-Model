@@ -1,24 +1,22 @@
-import numpy as np
+import torch
 
-def fitness_function(phenotype, alpha, sigma):
+def apply_fitness_selection(env):
     """
-    Oblicza fitness jako exp(-||p - alpha||^2/(2*sigma^2)).
-    phenotype i alpha to tablice numpy o kształcie (2,).
+    Usuwa osobniki z prawdopodobieństwem równym (1 - fitness)
     """
-    diff = phenotype - alpha
-    dist_sq = np.sum(diff**2)
-    return np.exp(-dist_sq / (2 * sigma**2))
+    fitnesses = env.calculate_fitness()
+    survives = fitnesses > torch.rand(fitnesses.shape, device=env.device)
+    apply_selection(env, survives)
 
-def apply_fitness_selection(population, alpha, sigma):
+def apply_random_selection(env, p_survival):
     """
-    Dla każdego osobnika oblicza fitness. Z prawdopodobieństwem równym (1 - fitness)
-    osobnik traci jedno życie. Jeśli jego life spadnie do 0, zostaje usunięty.
+    Usuwa osobniki z prawdopodobieństwem równym (1 - p_survival)
     """
-    survivors = []
-    for ind in population.individuals:
-        f = fitness_function(ind.get_phenotype(), alpha, sigma)
-        if np.random.rand() < (1 - f):
-            ind.life -= 1
-        if ind.life > 0:
-            survivors.append(ind)
-    return survivors
+    survives = torch.rand(env.pop.size, device=env.device) < p_survival
+    apply_selection(env, survives)
+
+def apply_selection(env, survives):
+    env.pop.genotypes = torch.masked_select(env.pop.genotypes, survives.unsqueeze(1).unsqueeze(2).expand(-1,env.pop.genotypes.shape[1],2)).reshape(
+                                                -1, env.pop.genotypes.shape[1], env.pop.genotypes.shape[2]) # Usuwamy wybrane osobniki
+    env.pop.size = env.pop.genotypes.shape[0]
+    env.pop.positions = torch.masked_select(env.pop.positions, survives.unsqueeze(1).expand(-1,2)).reshape(-1, 2)

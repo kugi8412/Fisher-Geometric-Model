@@ -1,145 +1,111 @@
-# main.py
-
+import torch
 import numpy as np
-import config
-from environment import Environment
-from population import Population
-from mutation import mutate_population
-from selection import proportional_selection, threshold_selection
-from reproduction import asexual_reproduction
-from visualization import plot_population
-
-# main.py
-
-import os
-import numpy as np
-import config
-from environment import Environment
-from population import Population
-from mutation import mutate_population
-from selection import proportional_selection, threshold_selection
-from reproduction import asexual_reproduction
-from visualization import plot_population
 import streamlit as st
-import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+from mutation import mutate_population
+from reproduction import reproduce
+from environment import FisherEnvironment
+from visualization import plot_phenotype_space, plot_reproduction_space, plot_gene_history
+from selection import apply_fitness_selection
 
-def main():
-    st.title("Symulacja Ewolucji Według Modelu Fishera")
-    st.markdown("""
-    Symulacja populacji organizmów ewoluujących w kierunku zmieniającego się optimum fenotypowego.
-    Każdy gen składa się z dwóch alleli (A/a), których wartości wpływają na fenotyp.
-    """)
+def generate_phenotype_matrix(n_genes: int, device: torch.device) -> torch.Tensor:
+    """Dynamicznie generuje macierz transformacji genotyp->fenotyp z wagami"""
+    with st.sidebar.expander("Wagi w macierzy transformacji"):
+        mid = n_genes // 2
+        st.markdown("**Pierwsza oś fenotypu (prędkość)**")
+        weights_x = [st.slider(f"Gen {i+1}", 0.0, 2.0, 1.0, key=f"weight_x_{i}") for i in range(mid)]
+        
+        st.markdown("**Druga oś fenotypu (promień rozm.)**")
+        weights_y = [st.slider(f"Gen {i+mid+1}", 0.0, 2.0, 1.0, key=f"weight_y_{i}") for i in range(n_genes - mid)]
 
-    params = {
-        'n_organisms': st.sidebar.slider("Liczba organizmów", 10, 1000, 200),
-        'n_genes': st.sidebar.slider("Liczba genów", 1, 50, 10),
-        # 'selection': st.sidebar.slider("Siła selekcji", 0.1, 10.0, 1.0),
-        'selection': st.sidebar.select_slider("Siła selekcji", [10**i for i in range(-5, 1)], 1.0),
-        'mutation_rate': st.sidebar.slider("Częstość mutacji", 0.0, 1.0, 0.1),
-        'gene_mutation_rate': st.sidebar.slider("Częstość mutacji genów", 0.0, 1.0, 0.1),
-        'mutation_mag': st.sidebar.slider("Siła mutacji", 0.0, 1.0, 0.1),
-        'reproduction_rate': st.sidebar.slider("Współczynnik reprodukcji", 0.0, 1.0, 0.5),
-        'opt_drift': st.sidebar.slider("Dryf optimum", -1.0, 1.0, 0.1),
-        'opt_noise': st.sidebar.slider("Zmienność optimum", 0.0, 1.0, 0.1),
-        'steps': st.sidebar.slider("Liczba pokoleń", 10, 1000, 100),
-        'log_interval': st.sidebar.slider("Interwał logowania", 1, 50, 5)
-    }
-
-    if st.button("Rozpocznij symulację"):
-        with st.spinner("Przebieg symulacji..."):
-            html = run_simulation(params)
-        st.success("Symulacja zakończona!")
-        components.html(html, width=800, height=600)
-
-    st.markdown("""
-    ### Opis parametrów:
-    - **Liczba organizmów**: Początkowa wielkość populacji
-    - **Liczba genów**: Wymiarowość przestrzeni fenotypowej
-    - **Siła selekcji**: Im większa wartość, tym silniejsza presja selekcyjna
-    - **Częstość/Siła mutacji**: Prawdopodobieństwo i wielkość zmian w allelach
-    - **Dryf optimum**: Średnia zmiana optimum fenotypowego w każdym kroku
-    - **Zmienność optimum**: Losowa zmienność w przesuwaniu optimum
-    """)
-
-def create_gif_from_frames(frames_dir, gif_filename, duration=0.2):
-    """
-    Łączy wszystkie obrazki z katalogu `frames_dir` w jeden plik GIF.
-    Wymaga biblioteki imageio (pip install imageio).
-    :param frames_dir: folder z plikami .png
-    :param gif_filename: nazwa pliku wyjściowego GIF
-    :param duration: czas wyświetlania jednej klatki w sekundach
-    """
-    import imageio
-    import os
-
-    # Sortujemy pliki po nazwach, żeby zachować kolejność generacji
-    filenames = sorted([f for f in os.listdir(frames_dir) if f.endswith(".png")])
-    
-    with imageio.get_writer(gif_filename, mode='I', duration=duration) as writer:
-        for file_name in filenames:
-            path = os.path.join(frames_dir, file_name)
-            image = imageio.imread(path)
-            writer.append_data(image)
+    matrix = torch.zeros((n_genes, 2), device=device)
+    matrix[:mid, 0] = torch.tensor(weights_x, device=device)
+    matrix[mid:, 1] = torch.tensor(weights_y, device=device)
+    return matrix
 
 def run_simulation(params):
-    history = []
-    fig, ax = plt.subplots()
-    env = Environment(alpha_init=np.array([0.0] * params['n_genes']), c=np.array([params['opt_drift']]*params['n_genes']), delta=params['opt_noise'])
-    pop = Population(size=params['n_organisms'], n_dim=params['n_genes'])
+    device = params['device']
+    env = FisherEnvironment(params, device)
+    gene_history = np.zeros((params['steps'], params['n_genes'] - 1))
+    
+    pheno_container = st.empty()
+    repro_container = st.empty()
+    gene_container = st.empty()
+    
+    for step in range(params['steps']):
+        phenos = env.pop.get_phenotypes()
+        
+        # Ruch osobników
+        angles = torch.rand(env.pop.size, device=device) * 2 * torch.pi
+        dx = phenos[:, 0] * torch.cos(angles)
+        dy = phenos[:, 0] * torch.sin(angles)
+        displacement = torch.stack([dx, dy], dim=1)
+        env.pop.update_positions(displacement)
 
-    # Katalog, w którym zapisujemy obrazki (możesz nazwać np. "frames/")
-    frames_dir = "frames"
-    os.makedirs(frames_dir, exist_ok=True)  # tworzy folder, jeśli nie istnieje
+        # Mutacja
+        mutate_population(env.pop, params['mutation_rate'], params['gene_mutation_rate'], params['mutation_strength'])
 
-    for generation in range(params['steps']):
-        # 1. Mutacja
-        mutate_population(pop, mu=params['mutation_rate'], mu_c=params['gene_mutation_rate'], xi=params['mutation_mag'])
-
-        # 2. Selekcja
-        survivors = threshold_selection(pop, env.get_optimal_phenotype(), params['selection'], 0)
-        pop.set_individuals(survivors)
-        if len(survivors) > 0:
-            proportional_selection(pop, env.get_optimal_phenotype(), params['selection'], params['n_organisms'])
-        else:
-            print(f"Wszyscy wymarli w pokoleniu {generation}. Kończę symulację.")
+        # Selekcja
+        apply_fitness_selection(env)
+        if env.pop.size < 2:
+            st.warning("Zbyt mało osobników – symulacja zakończona.")
             break
 
-        # 3. Reprodukcja (w przykładzie jest już wbudowana w selekcję)
-        # 4. Zmiana środowiska
-        env.update()
+        # Reprodukcja
+        reproduce(env)
 
-        # Zapis aktualnego stanu populacji do pliku PNG
-        frame_filename = os.path.join(frames_dir, f"frame_{generation:03d}.png")
-        plot_population(pop, env.get_optimal_phenotype(), generation, save_path=frame_filename, show_plot=False)
-        
-        if generation % params['log_interval'] == 0:
-            phenotypes = np.array([ind.get_phenotype() for ind in pop.get_individuals()])
-            opt_phenotype = env.get_optimal_phenotype()[:2] # placeholder, bo opt i tak ma mieć 2 wymiary
-            history.append((phenotypes, opt_phenotype))
+        # Aktualizacja optimum
+        env.update_optimal()
 
-    print("Symulacja zakończona. Tworzenie GIF-a...")
+        # Historia genów
+        gene_history[step] = env.pop.genotypes[:, :-1, :].mean(dim=(0, 2)).detach().cpu().numpy()
 
-    # Tutaj wywołujemy funkcję, która połączy zapisane klatki w animację
-    create_gif_from_frames(frames_dir, "simulation.gif")
+        # Wizualizacja
+        fig_pheno = plot_phenotype_space(env)
+        fig_repro = plot_reproduction_space(env.pop)
+        fig_genes = plot_gene_history(gene_history[:step+1])
 
-    print("GIF zapisany jako simulation.gif")
+        pheno_container.pyplot(fig_pheno)
+        repro_container.pyplot(fig_repro)
+        gene_container.pyplot(fig_genes)
 
-    def animate(i):
-        ax.clear()
-        data, opt = history[i]
-        ax.scatter(data[:, 0], data[:, 1], alpha=0.5)
-        ax.scatter(opt[0], opt[1], c='red', marker='X', s=100)
-        ax.set_title(f"Generation {i*params['log_interval']}")
-        ax.set_xlim(-10, 10)
-        ax.set_ylim(-10, 10)
-        return ax,
+    return env, gene_history
+
+def main():
+    st.set_page_config(page_title="Population Simulation",
+                       page_icon=":cat:")
+
+    st.title("Population Simulation")
     
-    anim = animation.FuncAnimation(fig, animate, frames=len(history), interval=100)
-    plt.close()
-    return anim.to_html5_video()
+    # Wybór urządzenia
+    device_options = ['CPU', 'GPU'] if torch.cuda.is_available() else ['CPU']
+    device = torch.device('cuda' if st.sidebar.radio("Urządzenie", device_options) == 'GPU' else 'cpu')
 
+    # Parametry
+    n_genes = st.sidebar.slider("Liczba genów", 3, 50, 11)
+    with st.sidebar.expander("Zaawansowane"):
+        phenotype_matrix = generate_phenotype_matrix(n_genes-1, device)
 
+    params = {
+        'device': device,
+        'n_organisms': st.sidebar.slider("Liczba organizmów", 100, 10000, 2000),
+        'n_genes': n_genes,
+        'area_width': st.number_input("Area Width", value=100),
+        'area_height': st.number_input("Area Height", value=100),
+        'phenotype_matrix': phenotype_matrix,
+        'selection': st.sidebar.slider("Siła selekcji (sigma)", 0.1, 10.0, 2.0),
+        'opt_drift': st.sidebar.slider("Dryf optimum", 0.0, 2.0, 0.05),
+        'opt_noise': st.sidebar.slider("Szum optimum", 0.0, 1.0, 0.1),
+        'steps': st.sidebar.slider("Liczba pokoleń", 10, 1000, 500),
+        'mutation_rate': st.sidebar.slider("Prawdopodobieństwo mutacji", 0.0, 1.0, 0.6),
+        'gene_mutation_rate': st.sidebar.slider("Prawdopodobieństwo mutacji genu", 0.0, 1.0, 0.6),
+        'mutation_strength': st.sidebar.slider("Siła mutacji", 0.0, 1.0, 0.2),
+    }
+    
+    if st.button("Start symulacji"):
+        with st.spinner("Symulacja w toku..."):
+            env, gene_history = run_simulation(params)
+        st.success("Symulacja zakończona!")
+        
 if __name__ == "__main__":
     main()

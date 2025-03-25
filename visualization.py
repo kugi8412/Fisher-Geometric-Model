@@ -3,21 +3,23 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 
-def plot_phenotype_space(pop):
-    """
-    Rysuje przestrzeń fenotypową: każdy punkt reprezentuje wyliczony fenotyp osobnika,
-    a czerwony krzyżyk z poświatą oznacza aktualne optimum (przyjmujemy, że optimum jest przechowywane w pop).
-    """
+def plot_phenotype_space(env):
+    pop = env.pop
     phenos = pop.get_phenotypes().detach().cpu().numpy()
-    # Zakładamy, że optimum jest atrybutem obiektu population (możesz go przekazać inaczej)
-    opt = pop.optimum if hasattr(pop, "optimum") else np.array([0,0])
+    opt = env.get_optimal_phenotype().detach().cpu().numpy()
+    
     fig, ax = plt.subplots()
-    ax.scatter(phenos[:, 0], phenos[:, 1], alpha=0.7, label="Organisms (phenotype)")
-    # Rysujemy optimum z czerwoną obwódką
-    ax.scatter(opt[0], opt[1], color='red', marker='X', s=150, edgecolor='red', linewidth=2, label="Optimum")
-    ax.set_xlim(0, pop.area_width/ (pop.n_genes -1)*((pop.n_genes-1)/2))
-    ax.set_ylim(0, pop.area_height/ (pop.n_genes -1)*((pop.n_genes-1)/2))
-    ax.set_title("Phenotype Space")
+    ax.scatter(phenos[:, 0], phenos[:, 1], alpha=0.5, label="Organizmy")
+    ax.scatter(opt[0][0], opt[0][1], color='red', marker='X', s=100, label="Optimum")
+    
+    # Dynamiczne zakresy
+    x_min, x_max = phenos[:,0].min(), phenos[:,0].max()
+    y_min, y_max = phenos[:,1].min(), phenos[:,1].max()
+    x_pad = max(1.0, (x_max - x_min) * 0.2)
+    y_pad = max(1.0, (y_max - y_min) * 0.2)
+    
+    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+    ax.set_ylim(y_min - y_pad, y_max + y_pad)
     ax.legend()
     return fig
 
@@ -25,7 +27,7 @@ def plot_reproduction_space(pop):
     """
     Rysuje przestrzeń fizyczną: pozycje osobników.
     """
-    positions = np.array([ind.position.cpu().numpy() for ind in pop.individuals])
+    positions = pop.positions.detach().cpu().numpy()
     fig, ax = plt.subplots()
     ax.scatter(positions[:, 0], positions[:, 1], alpha=0.7, label="Positions")
     ax.set_xlim(0, pop.area_width)
@@ -35,12 +37,10 @@ def plot_reproduction_space(pop):
     return fig
 
 def plot_gene_history(gene_history):
-    generations = list(range(len(next(iter(gene_history.values())))))
-    df_list = []
-    for gene, values in gene_history.items():
-        df_temp = pd.DataFrame({'Generation': generations, 'Average Value': values, 'Gene': gene})
-        df_list.append(df_temp)
-    df_genes = pd.concat(df_list)
-    fig = px.line(df_genes, x="Generation", y="Average Value", color="Gene",
-                  title="Average Gene Values Over Generations")
+    fig, ax = plt.subplots()
+    for i in range(gene_history.shape[1]):
+        ax.plot(gene_history[:, i], label=f"Gene {i+1}")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Genes")
+    ax.legend()
     return fig
