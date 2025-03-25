@@ -6,12 +6,14 @@ class FisherEnvironment:
     def __init__(self,
                  params: Dict[str, float],
                  device: str):
-        # CHANGE: Transpose Matrix
+        """ Klasa przechowuje populację oraz
+        aktualny, optymalny fenotyp.
+        """
         self.params = params
         self.device = device
         self.c = torch.tensor(params['opt_drift'], device=device).expand(1, params['n_genes']-1, 2)
         
-        self.population = Population(
+        self.pop = Population(
             params['n_organisms'],
             params['n_genes'],
             params['area_width'],
@@ -32,7 +34,7 @@ class FisherEnvironment:
         """ Metoda służąca obliczeniu prawdopodobieństwa przeżycia
         każdego osobnika znajdującego się w populacji.
         """
-        phenos = self.population.get_phenotypes()
+        phenos = self.pop.get_phenotypes()
         optimal_pheno = self.get_optimal_phenotype()
         
         # Wyliczenia prawdopodobieństwa przeżycia z rozkładu normalnego
