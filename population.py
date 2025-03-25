@@ -31,7 +31,7 @@ class Population:
         Oblicza fenotyp każdego osobnika i zwraca tensor (N, 2),
         za wypadkowy genotyp uznajemy średnią z obu alleli.
         """
-        return torch.matmul(self.genotypes.mean(-1)[:,:-1], self.phenotype_matrix)
+        return torch.matmul(self.genotypes.mean(-1)[:, :-1], self.phenotype_matrix)
     
     def update_positions(self, displacement):
         """

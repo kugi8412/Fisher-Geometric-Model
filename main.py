@@ -22,7 +22,7 @@ def generate_phenotype_matrix(n_genes: int, device: torch.device) -> torch.Tenso
                 w2 = st.slider(f"Gen {i+1} - Oś Y", 0.0, 2.0, 1.0, key=f"gene_{i}_y")
             weights.append([w1, w2])
     
-    return torch.tensor(weights, device=device).T
+    return torch.tensor(weights, device=device).T.transpose(0, 1)
 
 def run_parameter_analysis(base_params: Dict):
     """Runs multiple simulations for parameter analysis and generates heatmap."""
@@ -110,6 +110,7 @@ def run_simulation(params):
         # Visualization TO CHANGE
         fig_pheno = plot_phenotype_space(env)
         fig_repro = plot_reproduction_space(env.pop)
+        fig_genes = plot_gene_history(gene_history)
 
         # Population trend
         df_pop = pd.DataFrame({'Generation': range(len(population_history)), 'Population': population_history})
@@ -117,6 +118,7 @@ def run_simulation(params):
 
         pheno_container.plotly_chart(fig_pheno)
         repro_container.plotly_chart(fig_repro)
+        gene_container.plotly_chart(fig_genes)
         pop_container.plotly_chart(fig_pop)
 
         # Progress bar update
