@@ -3,14 +3,15 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 
-def plot_phenotype_space(pop):
+def plot_phenotype_space(env):
     """
     Rysuje przestrzeń fenotypową: każdy punkt reprezentuje wyliczony fenotyp osobnika,
     a czerwony krzyżyk z poświatą oznacza aktualne optimum (przyjmujemy, że optimum jest przechowywane w pop).
     """
+    pop = env.pop
     phenos = pop.get_phenotypes().detach().cpu().numpy()
     # Zakładamy, że optimum jest atrybutem obiektu population (możesz go przekazać inaczej)
-    opt = pop.optimum if hasattr(pop, "optimum") else np.array([0,0])
+    opt = env.get_optimal_phenotype().squeeze(0) if hasattr(env, "optimal_genotype") else np.array([0,0])
     fig, ax = plt.subplots()
     ax.scatter(phenos[:, 0], phenos[:, 1], alpha=0.7, label="Organisms (phenotype)")
     # Rysujemy optimum z czerwoną obwódką
@@ -21,10 +22,11 @@ def plot_phenotype_space(pop):
     ax.legend()
     return fig
 
-def plot_reproduction_space(pop):
+def plot_reproduction_space(env):
     """
     Rysuje przestrzeń fizyczną: pozycje osobników.
     """
+    pop = env.pop
     positions = pop.positions.detach().cpu().numpy()
     fig, ax = plt.subplots()
     ax.scatter(positions[:, 0], positions[:, 1], alpha=0.7, label="Positions")

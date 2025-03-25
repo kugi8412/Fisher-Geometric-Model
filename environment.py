@@ -1,26 +1,53 @@
 import torch
+from typing import Dict
 from population import Population
 
 class FisherEnvironment:
-    def __init__(self, params, device):
+    def __init__(self,
+                 params: Dict[str, float],
+                 device: str):
+        """ Klasa przechowuje populację oraz
+        aktualny, optymalny fenotyp.
+        """
         self.params = params
         self.device = device
-        self.area_width = params['area_width']
-        self.area_height = params['area_height']
-        self.pop = Population(params['n_organisms'], params['n_genes'], device, self.area_width, self.area_height)
-        # Początkowe optimum fenotypowe – losujemy z przedziału [0, maksymalna wartość] dla każdej osi.
-        # Maksymalna wartość dla jednej osi przy 10 genach fenotypowych wynosi 5.
-        self.optimal = torch.rand(2, device=device) * ((params['n_genes'] - 1)/2)
-    
-    def update_optimal(self):
-        # Optimum porusza się zgodnie z rozkładem normalnym – parametry podawane w params
-        drift = torch.normal(self.params['opt_drift'], self.params['opt_noise'], size=(2,), device=self.device)
-        self.optimal = (self.optimal + drift).clamp(0, (self.params['n_genes'] - 1)/2)
-        # Przechowujemy optimum również w obiekcie pop, aby wykres fenotypowy mógł go wykorzystać
-        self.pop.optimum = self.optimal.detach().cpu().numpy()
+        self.c = torch.tensor(params['opt_drift'], device=device).expand(1, params['n_genes']-1, 2)
+        
+        self.pop = Population(
+            params['n_organisms'],
+            params['n_genes'],
+            params['area_width'],
+            params['area_height'],
+            params['phenotype_matrix'],
+            device
+        )
+        
+        # Optymalny genotyp dla danego środowiska, bez znaczenia na płeć
+        self.optimal_genotype = torch.rand((1, params['n_genes']-1, 2), device=device)
+        
+    def get_optimal_phenotype(self):
+        """ Metoda oblicza optymalny fenotyp z genotypu
+        """
+        return torch.matmul(self.optimal_genotype.mean(-1), self.params['phenotype_matrix'].transpose(0,1))
     
     def calculate_fitness(self):
+        """ Metoda służąca obliczeniu prawdopodobieństwa przeżycia
+        każdego osobnika znajdującego się w populacji.
+        """
         phenos = self.pop.get_phenotypes()
-        distances = torch.norm(phenos - self.optimal, dim=1)**2
-        fitness = torch.exp(- distances**2 / (2 * self.params['selection']**2))
-        return fitness
+        optimal_pheno = self.get_optimal_phenotype()
+        
+        # Wyliczenia prawdopodobieństwa przeżycia z rozkładu normalnego
+        phenotype_dist = torch.norm(phenos - optimal_pheno, dim=1)
+        phenotype_fitness = torch.exp(-phenotype_dist**2 /
+                                      (2 * (self.params['selection']**2)))
+        
+        return phenotype_fitness
+    
+    def update_optimal(self):
+        """ Metoda zapewniająca mutację
+        optymalnego genotypu, w celu zmiany środowiska
+        """
+        mutation = torch.normal(mean=self.c,
+                                std=self.params['opt_noise'] * torch.ones_like(self.c))
+        self.optimal_genotype = (self.optimal_genotype + mutation).clamp(0,1)
