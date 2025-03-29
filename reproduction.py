@@ -10,8 +10,7 @@ def reproduce(env):
     male_mask = ~female_mask
     
     if female_mask.sum() == 0 or male_mask.sum() == 0:
-        st.warning("Brak osobników jednej z płci")
-        return
+        return True
 
     # Konwersja do CPU dla KDTree
     females_pos = pop.positions[female_mask].cpu().numpy()
@@ -23,7 +22,7 @@ def reproduce(env):
     neighbors = torch.tensor(neighbors.squeeze(), device=device)
 
     phenotypes = pop.get_phenotypes()
-    radius = phenotypes[female_mask, 1] * 10
+    radius = phenotypes[female_mask, 1] * env.params['radius_multiplier']
     reproduction_prob = 1 - pop.size / (2 * env.params['n_organisms'])
     
     is_reproducing = (distances < radius) & (torch.rand_like(distances) < reproduction_prob)
@@ -56,3 +55,5 @@ def reproduce(env):
         pop.genotypes = torch.cat([pop.genotypes, torch.cat([new_genotypes, new_sex], dim=1)])
         pop.positions = torch.cat([pop.positions, (females_pos + males_pos)/2])
         pop.size = pop.genotypes.shape[0]
+
+    return False

@@ -23,7 +23,7 @@ class FisherEnvironment:
         )
         
         # Optymalny genotyp dla danego środowiska, bez znaczenia na płeć
-        self.optimal_genotype = torch.rand((1, params['n_genes']-1, 2), device=device)
+        self.optimal_genotype = torch.rand((1, params['n_genes']-1, 2), device=device, dtype=torch.float32)
         
     def get_optimal_phenotype(self):
         """ Metoda oblicza optymalny fenotyp z genotypu
@@ -50,4 +50,4 @@ class FisherEnvironment:
         """
         mutation = torch.normal(mean=self.c,
                                 std=self.params['opt_noise'] * torch.ones_like(self.c))
-        self.optimal_genotype = (self.optimal_genotype + mutation).clamp(0,1)
+        self.optimal_genotype = (self.optimal_genotype + mutation).clamp(0,1).float()
