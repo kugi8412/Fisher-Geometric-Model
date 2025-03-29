@@ -23,7 +23,7 @@ def reproduce(env):
 
     phenotypes = pop.get_phenotypes()
     radius = phenotypes[female_mask, 1] * env.params['radius_multiplier']
-    reproduction_prob = 1 - pop.size / (env.params['max_pop_size'])
+    reproduction_prob = 1 - pop.size / (env.params['max_population'])
     
     is_reproducing = (distances < radius) & (torch.rand_like(distances) < reproduction_prob)
     
