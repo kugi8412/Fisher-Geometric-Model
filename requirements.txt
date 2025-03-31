@@ -1,5 +1,0 @@
-numpy==2.2.3
-torch==2.5.0
-pandas==2.2.3
-plotly==6.0.0
-streamlit==1.43.1
