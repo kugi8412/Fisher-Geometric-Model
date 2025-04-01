@@ -2,45 +2,188 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import pandas as pd
 import numpy as np
+from PIL import Image
+from typing import List
+
 
 def plot_phenotype_space(env):
+    """ Matplotlib plot for phenotype space with
+    radius for probability 0.5 to survive.
+    """
+    plt.style.use('seaborn-v0_8-dark')
+    
     pop = env.pop
     phenos = pop.get_phenotypes().detach().cpu().numpy()
-    opt = env.get_optimal_phenotype().detach().cpu().numpy()
+    opt = env.get_optimal_phenotype().squeeze(0).detach().cpu().numpy()
+    n_genes = env.params['n_genes'] - 1
     
-    fig, ax = plt.subplots()
-    ax.scatter(phenos[:, 0], phenos[:, 1], alpha=0.5, label="Organizmy")
-    ax.scatter(opt[0][0], opt[0][1], color='red', marker='X', s=100, label="Optimum")
+    fig, ax = plt.subplots(figsize=(9, 7), dpi=400)
+    plt.subplots_adjust(left=0.1, right=0.2, top=0.2, bottom=0.1)
     
-    # Dynamiczne zakresy
-    x_min, x_max = phenos[:,0].min(), phenos[:,0].max()
-    y_min, y_max = phenos[:,1].min(), phenos[:,1].max()
-    x_pad = max(1.0, (x_max - x_min) * 0.2)
-    y_pad = max(1.0, (y_max - y_min) * 0.2)
+    # Calculate distances and fitness
+    distances = np.linalg.norm(phenos - opt, axis=1)
+    fitness = np.exp(-distances**2 / (2 * env.params['selection']))
+
+    '''
+    selection_strength = env.params['selection']
+    radius = selection_strength * np.sqrt(-2 * np.log(0.5))
+    circle = plt.Circle((opt[0], opt[1]), radius, 
+                       color='tomato', alpha=0.15, 
+                       label='50% survival threshold')
+    ax.add_patch(circle)
+    '''
     
-    ax.set_xlim(x_min - x_pad, x_max + x_pad)
-    ax.set_ylim(y_min - y_pad, y_max + y_pad)
-    ax.legend()
+    # Fitness colour scatter plot
+    sc = ax.scatter(
+        phenos[:, 0], phenos[:, 1], 
+        c=fitness,
+        cmap='RdYlGn',
+        alpha=0.5,
+        s=100,
+        edgecolors='w',
+        linewidth=0.5,
+        vmin=0,
+        vmax=1
+    )
+    
+    # Optimal point
+    ax.scatter(opt[0], opt[1], marker='X', 
+              s=500, color='#0000FF', label='Optimum', zorder=1)
+    
+    # Colorbar
+    cbar = plt.colorbar(sc, ax=ax, pad=0.02)
+    cbar.set_label('Fitness', fontsize=16)
+    cbar.ax.tick_params(labelsize=12)
+    
+    # Labels and styling
+    ax.set_xlim(0, n_genes * 2)
+    ax.set_ylim(0, n_genes * 2)
+    ax.set_xlabel('Speed', fontsize=16)
+    ax.set_ylabel('Reproduction Range', fontsize=16, labelpad=10)
+    ax.set_title(f'Phenotype Space (generation: {env.current_step})', fontsize=20, pad=15)
+    ax.grid(True, linestyle='--', alpha=0.6)
+    
+    # Legend
+    ax.legend(
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.1),
+        frameon=True,
+        framealpha=0.9,
+        fontsize=12
+    )
+    
+    plt.tight_layout()
     return fig
 
-def plot_reproduction_space(pop):
+
+def plot_reproduction_space(env):
+    """ Matplotlib plot for reproduction space.
     """
-    Rysuje przestrzeń fizyczną: pozycje osobników.
-    """
+    pop = env.pop
     positions = pop.positions.detach().cpu().numpy()
+    
     fig, ax = plt.subplots()
-    ax.scatter(positions[:, 0], positions[:, 1], alpha=0.7, label="Positions")
+    ax.scatter(positions[:, 0], positions[:, 1], alpha=0.4)
     ax.set_xlim(0, pop.area_width)
     ax.set_ylim(0, pop.area_height)
-    ax.set_title("Physical Reproduction Space")
-    ax.legend()
+    ax.set_title(f"Reproduction space (generation: {env.current_step})", fontsize=16)
     return fig
 
-def plot_gene_history(gene_history):
+
+def plot_gene_history_matplotlib(gene_history: np.ndarray):
+    """ Matplotlib version to be updated during simulation.
+    """
     fig, ax = plt.subplots()
     for i in range(gene_history.shape[1]):
-        ax.plot(gene_history[:, i], label=f"Gene {i+1}")
-    ax.set_xlabel("Generation")
-    ax.set_ylabel("Genes")
-    ax.legend()
+        ax.plot(gene_history[:, i], label=f"Gen {i+1}")
+
+    ax.set_xlabel("Generation", fontsize=14)
+    ax.set_ylabel("Average gene value", fontsize=14)
+    ax.set_title("Evolution of genes over time", fontsize=18)
+    ax.legend(bbox_to_anchor=(1.05, 1.25), loc='lower left')
+    plt.tight_layout()
     return fig
+
+
+def plot_population_history_plotly(population_history: List[int]):
+    """ Generates an interactive graph of population size.
+    """
+    df = pd.DataFrame({
+        'Generation': range(len(population_history)),
+        'Population': population_history
+    })
+    
+    fig = px.line(df, 
+                 x='Generation', 
+                 y='Population',
+                 labels={'Population': 'Number of individuals', 'Generation': 'Generation'},
+                 title='Number of population over time',
+                 markers=True,
+                 template='plotly_white')
+    
+    fig.update_layout(
+        hovermode='x',
+        xaxis_title='Generation',
+        yaxis_title='Number of individuals',
+        showlegend=False
+    )
+    return fig
+
+
+def plot_gene_history_plotly(gene_history: np.ndarray):
+    """ Plotly version for final summary.
+    """
+    df = pd.DataFrame(gene_history)
+    df.columns = [f"{i+1}" for i in range(gene_history.shape[1])]
+    df['Generation'] = df.index
+    
+    fig = px.line(df, 
+                 x='Generation', 
+                 y=[col for col in df.columns if col != 'step'],
+                 labels={'value': 'Average gene value', 'variable': 'Gene'},
+                 title='Evolution of genes over time')
+    
+    fig.update_layout(
+        hovermode='x unified',
+        legend=dict(orientation="h", yanchor="bottom", y=-0.75, xanchor="auto", x=0.5),
+        template='plotly_white'
+    )
+
+    '''
+    fig.add_annotation(
+    text="Change of mean values during time.",
+    xref="paper", yref="paper",
+    x=0.5, y=-0.2, 
+    showarrow=False,
+    font=dict(size=12)
+    )
+    '''
+    return fig
+
+def create_gif(frame_paths: str,
+               output_filename: str,
+               duration: int = 400):
+    """ Creates a GIF with
+    storaged plots in directory.
+    """
+    
+    images = []
+    base_size = (800, 800)
+    
+    for path in frame_paths:
+        try:
+            img = Image.open(path)
+            img = img.resize(base_size).convert('RGB')
+            images.append(img)
+        except Exception as e:
+            print(f"Error with frame {path}: {e}")
+    
+    if images:
+        images[0].save(
+            output_filename,
+            save_all=True,
+            append_images=images[1:],
+            duration=duration,
+            loop=0,
+            optimize=True
+        )
