@@ -24,8 +24,8 @@ class Population:
                                     torch.randint(0, 2, size=(size, 1, 1), device=device).expand(-1,-1,2)],dim=1)
         
         # Initialisation of the initial position of individuals
-        self.positions = torch.rand(size, 2, device=device) * torch.tensor(
-                                    [area_width, area_height], device=device)
+        self.positions = torch.rand(size, 2, device=device) *\
+                        torch.tensor([area_width, area_height], device=device)
     
     def get_phenotypes(self) -> torch.tensor:
         """ Calculates the phenotype of each individual and
@@ -35,7 +35,7 @@ class Population:
         return torch.matmul(self.genotypes.mean(-1)[:, :-1], self.phenotype_matrix)
     
     def update_positions(self,
-                         displacement: torch.tensor):
+                         displacement: torch.tensor) -> None:
         """ Updates the position of each individual
         in two-dimensional space.
         """

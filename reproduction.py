@@ -4,52 +4,60 @@ from sklearn.neighbors import KDTree
 
 def reproduce(env) -> bool:
     """ Function responsible for the reproduction
-    of individuals that survive selection. Using KDTree for faster computation.
-    If still individuals returns False and continue the simulation.
+    of individuals that survive selection.
+    Using KDTree for faster computation.
+    If still remaining any individuals
+    returns False and continue the simulation.
     """
     pop = env.pop
     device = pop.device
-
     
-    female_mask = pop.get_sex_mask()
+    female_mask = pop.get_sex_mask().cpu()
     male_mask = ~female_mask
     
     if female_mask.sum() == 0 or male_mask.sum() == 0:
         return True
 
-    # Conversion to CPU for KDTree
+    # Convert to CPU for KDTree
     females_pos = pop.positions[female_mask].cpu().numpy()
     males_pos = pop.positions[male_mask].cpu().numpy()
+    
     tree = KDTree(males_pos)
     distances, neighbors = tree.query(females_pos, k=1)
+    
+    # Move to correct device
     distances = torch.tensor(distances.squeeze(), device=device)
     neighbors = torch.tensor(neighbors.squeeze(), device=device)
-    
-    # Inicjalizacja warunków
     phenotypes = pop.get_phenotypes()
     radius = phenotypes[female_mask, 1] * env.params['radius_multiplier']
     conditions = torch.ones_like(distances, dtype=torch.bool)
     reproduction_prob = torch.ones_like(distances)
 
-    # 1. Warunek fitnessu
+    # Probability of reproduction is fitness
     if 'fitness' in env.params['reproduction_factors']:
         fitness = env.calculate_fitness()[female_mask]
-        reproduction_prob *= fitness
+        try:
+            reproduction_prob *= fitness
+        except RuntimeError:
+            reproduction_prob = torch.zeros_like(distances)
 
-    # 2. Próg fitnessu
+    # Fitness Threshold
     if 'fitness_threshold' in env.params['reproduction_factors']:
         fitness = env.calculate_fitness()[female_mask]
-        conditions &= (fitness > env.params['min_fitness'])
+        try:
+            conditions &= (fitness > env.params['min_fitness'])
+        except RuntimeError:
+            conditions = torch.zeros_like(distances)
 
-    # 4. Pojemność środowiska
+    # Environmnet capacity (logistic curve)
     if 'capacity' in env.params['reproduction_factors']:
         capacity_factor = 1 - (pop.size / env.params['max_population'])
         reproduction_prob *= capacity_factor
 
-    # Końcowa decyzja
+    # Probability of Reproduction
     is_reproducing = (distances < radius) & conditions & (torch.rand_like(distances) < reproduction_prob)
     
-    # Gene crossing
+    # Crossing-over
     if is_reproducing.any():
         female_genotypes = pop.genotypes[female_mask]
         females_pos = pop.positions[female_mask]
@@ -75,7 +83,7 @@ def reproduce(env) -> bool:
         # Adding new individuals
         new_sex = torch.randint(0, 2, (new_genotypes.shape[0], 1, 2), device=device)
         pop.genotypes = torch.cat([pop.genotypes, torch.cat([new_genotypes, new_sex], dim=1)])
-        pop.positions = torch.cat([pop.positions, (females_pos + males_pos)/2])
+        pop.positions = torch.cat([pop.positions, (females_pos + males_pos) / 2])
         pop.size = pop.genotypes.shape[0]
 
         # Maximal size of population
