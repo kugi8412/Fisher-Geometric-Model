@@ -7,7 +7,7 @@ This project is a streamlit application to simulate the evolution of a populatio
 ## Running the Program
 The required libraries can be installed them using `pip install -r requirements.txt`.
 
-To launch the program, go to the source directory and `run streamlit run main.py`.
+To launch the program, go to the source directory and `streamlit run main.py`.
 
 ### Example analysis
 The application allows you to see how the position of individuals changes over successive generations as their phenotype attempts to match the existing optimum in the environment.
