@@ -155,4 +155,4 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()
 
     main()
-    delete_temp_files("temp_frames")
+    delete_temp_files("temp_frames") # delete plots after make GIF

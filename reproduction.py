@@ -19,43 +19,49 @@ def reproduce(env) -> bool:
         return True
 
     # Convert to CPU for KDTree
+    phenotypes = env.pop.get_phenotypes()
     females_pos = pop.positions[female_mask].cpu().numpy()
     males_pos = pop.positions[male_mask].cpu().numpy()
-    
     tree = KDTree(males_pos)
     distances, neighbors = tree.query(females_pos, k=1)
-    
-    # Move to correct device
+
+    # Change to available device
     distances = torch.tensor(distances.squeeze(), device=device)
     neighbors = torch.tensor(neighbors.squeeze(), device=device)
-    phenotypes = pop.get_phenotypes()
-    radius = phenotypes[female_mask, 1] * env.params['radius_multiplier']
     conditions = torch.ones_like(distances, dtype=torch.bool)
     reproduction_prob = torch.ones_like(distances)
 
     # Probability of reproduction is fitness
     if 'fitness' in env.params['reproduction_factors']:
-        fitness = env.calculate_fitness()[female_mask]
+        fitness = env.calculate_fitness()
+        
+        # Indices of females and males in the population
+        female_indices = torch.where(female_mask)[0].to(device)
+        male_indices = torch.where(male_mask)[0].to(device)
+        selected_male_indices = male_indices[neighbors]
+        
+        # Compute fintess of individuals
+        female_fitness = fitness[female_indices]
+        male_fitness = fitness[selected_male_indices]
+        fitness_cond = (female_fitness > env.params['min_fitness']) & (male_fitness > env.params['min_fitness'])
+        
+        # True, if the simulation will be terminated
         try:
-            reproduction_prob *= fitness
+            conditions &= fitness_cond
         except RuntimeError:
-            reproduction_prob = torch.zeros_like(distances)
+            return True
+            
 
-    # Fitness Threshold
-    if 'fitness_threshold' in env.params['reproduction_factors']:
-        fitness = env.calculate_fitness()[female_mask]
-        try:
-            conditions &= (fitness > env.params['min_fitness'])
-        except RuntimeError:
-            conditions = torch.zeros_like(distances)
+    if 'fitness' in env.params['reproduction_factors']:
+        reproduction_prob *= fitness[female_indices]
 
-    # Environmnet capacity (logistic curve)
     if 'capacity' in env.params['reproduction_factors']:
         capacity_factor = 1 - (pop.size / env.params['max_population'])
         reproduction_prob *= capacity_factor
 
-    # Probability of Reproduction
-    is_reproducing = (distances < radius) & conditions & (torch.rand_like(distances) < reproduction_prob)
+    # Final condition for reproduction
+    is_reproducing = (distances < phenotypes[female_mask, 1]*env.params['radius_multiplier']
+                    ) & conditions & (torch.rand_like(distances) < reproduction_prob)
     
     # Crossing-over
     if is_reproducing.any():
