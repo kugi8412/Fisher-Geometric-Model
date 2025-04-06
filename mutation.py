@@ -21,7 +21,8 @@ def mutate_genotypes(genotype: torch.Tensor,
     mutation[:, -1, :] = 0.0 # not mutate the sex
 
     # if organism is mutating (n_org, n_genes, 2)
-    mutate_ind = (torch.rand(genotype.shape[0]) < mutation_rate).unsqueeze(1).unsqueeze(2).expand(-1,genotype.shape[1],2)
+    mutate_ind = (torch.rand(genotype.shape[0]) < mutation_rate).unsqueeze(1).unsqueeze(2)\
+                                                                .expand(-1, genotype.shape[1], 2)
 
     # if gene is mutating (n_org, n_genes, 2)
     mutate_gene = torch.rand(genotype.shape) < gene_mutation_rate

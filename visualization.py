@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt
-import plotly.express as px
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import plotly.express as px
 from PIL import Image
 from typing import List
 
@@ -15,7 +15,8 @@ def plot_phenotype_space(env):
     pop = env.pop
     phenos = pop.get_phenotypes().detach().cpu().numpy()
     opt = env.get_optimal_phenotype().squeeze(0).detach().cpu().numpy()
-    n_genes = env.params['n_genes'] - 1
+    limes = env.params['phenotype_matrix'].sum(axis=0).squeeze()
+    max_speed, max_radius = int(limes[0]), int(limes[1])
     
     fig, ax = plt.subplots(figsize=(9, 7), dpi=400)
     plt.subplots_adjust(left=0.1, right=0.2, top=0.2, bottom=0.1)
@@ -24,7 +25,9 @@ def plot_phenotype_space(env):
     distances = np.linalg.norm(phenos - opt, axis=1)
     fitness = np.exp(-distances**2 / (2 * env.params['selection']))
 
-    '''
+    ''' Allows painting a circle inside which individuals have
+    at least a 50% chance of survival in the fitness selection
+    
     selection_strength = env.params['selection']
     radius = selection_strength * np.sqrt(-2 * np.log(0.5))
     circle = plt.Circle((opt[0], opt[1]), radius, 
@@ -38,17 +41,15 @@ def plot_phenotype_space(env):
         phenos[:, 0], phenos[:, 1], 
         c=fitness,
         cmap='RdYlGn',
-        alpha=0.5,
+        alpha=0.6,
         s=100,
-        edgecolors='w',
-        linewidth=0.5,
         vmin=0,
         vmax=1
     )
     
     # Optimal point
     ax.scatter(opt[0], opt[1], marker='X', 
-              s=500, color='#0000FF', label='Optimum', zorder=1)
+              s=600, color='#0000FF', label='Optimum', zorder=1)
     
     # Colorbar
     cbar = plt.colorbar(sc, ax=ax, pad=0.02)
@@ -56,8 +57,8 @@ def plot_phenotype_space(env):
     cbar.ax.tick_params(labelsize=12)
     
     # Labels and styling
-    ax.set_xlim(0, n_genes * 2)
-    ax.set_ylim(0, n_genes * 2)
+    ax.set_xlim(0, max_speed + 0.5)
+    ax.set_ylim(0, max_radius + 0.5)
     ax.set_xlabel('Speed', fontsize=16)
     ax.set_ylabel('Reproduction Range', fontsize=16, labelpad=10)
     ax.set_title(f'Phenotype Space (generation: {env.current_step})', fontsize=20, pad=15)
@@ -100,7 +101,7 @@ def plot_gene_history_matplotlib(gene_history: np.ndarray):
     ax.set_xlabel("Generation", fontsize=14)
     ax.set_ylabel("Average gene value", fontsize=14)
     ax.set_title("Evolution of genes over time", fontsize=18)
-    ax.legend(bbox_to_anchor=(1.05, 1.25), loc='lower left')
+    ax.legend(bbox_to_anchor=(1.00, 1.00), loc='lower left')
     plt.tight_layout()
     return fig
 
@@ -160,11 +161,16 @@ def plot_gene_history_plotly(gene_history: np.ndarray):
     '''
     return fig
 
-def create_gif(frame_paths: str,
+
+def create_gif(frame_paths: list,
                output_filename: str,
                duration: int = 400):
-    """ Creates a GIF with
-    storaged plots in directory.
+    """Creates GIF from stored image files.
+    
+    Args:
+        frame_paths (list): List of paths to individual frames
+        output_filename (str): Output GIF filename
+        duration (int): Display duration per frame in milliseconds
     """
     
     images = []
@@ -172,18 +178,24 @@ def create_gif(frame_paths: str,
     
     for path in frame_paths:
         try:
-            img = Image.open(path)
-            img = img.resize(base_size).convert('RGB')
-            images.append(img)
+            # Open frames
+            with Image.open(path) as img:
+                img = img.resize(base_size).convert('RGB')
+                images.append(img.copy())
         except Exception as e:
-            print(f"Error with frame {path}: {e}")
+            print(f"Error processing frames {path}: {e}")
+            continue
     
     if images:
-        images[0].save(
-            output_filename,
-            save_all=True,
-            append_images=images[1:],
-            duration=duration,
-            loop=0,
-            optimize=True
-        )
+        try:
+            # Make GIF, from first image
+            images[0].save(
+                output_filename,
+                save_all=True,
+                append_images=images[1:],
+                duration=duration,
+                loop=0,
+                optimize=True
+            )
+        except Exception as e:
+            print(f"Failed to save GIF: {e}")

@@ -1,12 +1,11 @@
 import os
-import time
 import torch
 import numpy as np
 import streamlit as st
 import plotly.express as px
 import matplotlib.pyplot as plt
-from typing import Dict
 from itertools import product
+from typing import Dict
 from environment import FisherEnvironment
 from reproduction import reproduce
 from mutation import mutate_population
@@ -25,13 +24,10 @@ def run_parameter_analysis(base_params: Dict[str, float],
     """ Improved parameter analysis function
     to create heatmap of mean survivors.
     """
-    if param1 == "radius_multiplier" or param1 == "selection":
-        values1 = np.linspace(0.0, 10.0, grid_size1)
-    else:
-        values1 = np.linspace(0.0, 1.0, grid_size1)
-    
+    values1 = np.linspace(0.01, 10.0, grid_size1) if param1 in [
+                                                "radius_multiplier",
+                                                "selection"] else np.linspace(0.01, 1.0, grid_size1)
     values2 = np.linspace(0.01, 1.0, grid_size2)
-
     results = np.zeros((grid_size1, grid_size2))
     total_points = grid_size1 * grid_size2
     
@@ -91,7 +87,7 @@ def run_simulation(params, pheno_container, repro_container, gene_container, ana
 
     # Checking User
     if not params['reproduction_factors']:
-        st.error("Musisz wybrać przynajmniej jeden czynnik reprodukcji!")
+        st.error("Choose at least one reproduction factor!")
         return
 
     for step in range(params['steps']):

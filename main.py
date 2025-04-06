@@ -83,13 +83,13 @@ def main():
     device = torch.device('cuda' if st.sidebar.radio("DEVICE", device_options) == 'GPU' else 'cpu')
 
     # Parameters
-    n_genes = st.sidebar.slider("Number of genes", 3, 11, 4)
+    n_genes = st.sidebar.slider("Number of genes", 3, 11, 5)
     phenotype_matrix = generate_phenotype_matrix(n_genes-1, device)
     
-    # User selection for drift for each gene
+    # User selection for drift for each gene affecting the phenotype
     with st.sidebar.expander("Drift for genes"):
         opt_drift = []
-        for i in range(n_genes - 1):  # For each gene affecting the phenotype
+        for i in range(n_genes - 1):
             col1, col2 = st.columns(2)
             with col1:
                 drift_allele1 = st.slider(f"Gene {i+1} drift (allel 1)", -1.0, 1.0, 0.0, key=f"drift_{i}_a1")
@@ -102,7 +102,7 @@ def main():
         'n_genes': n_genes,
         'opt_drift': opt_drift,
         'phenotype_matrix': phenotype_matrix,
-        'steps': st.number_input("Number of generations", 10, 10000, 50),
+        'steps': st.number_input("Number of generations", 1, 10000, 50),
         'area_width': st.number_input("Area Width", min_value=10, max_value=10000, value=100),
         'area_height': st.number_input("Area Height", min_value=10, max_value=10000, value=100),
         'n_organisms': st.sidebar.number_input("Number of organisms", 10, 100000, 1000),
@@ -140,12 +140,19 @@ def main():
         param2 = st.sidebar.selectbox("Parameter 2", ['mutation_rate', 'gene_mutation_rate', 
                                                       'mutation_strength', 'opt_noise'])
     
-        grid_size1 = st.sidebar.slider("Grid size for 1 parameter", 2, 20, 10)
-        grid_size2 = st.sidebar.slider("Grid size for 2 parameter", 2, 20, 10)
+        grid_size1 = st.sidebar.slider("Grid size for 1 parameter", 2, 50, 20)
+        grid_size2 = st.sidebar.slider("Grid size for 2 parameter", 2, 50, 20)
         trials = st.sidebar.slider("Number of trials", 1, 20, 5)
         if st.button("Start Batch Simulation"):
             run_parameter_analysis(params, param1, param2, grid_size1, grid_size2, trials)
 
 if __name__ == "__main__":
+    torch.classes.__path__ = [] # not for web streamlit
+    torch.manual_seed(seed=42)
+
+    if torch.cuda.is_available():
+        torch.cuda.init()
+        torch.cuda.empty_cache()
+
     main()
     delete_temp_files("temp_frames")

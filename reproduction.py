@@ -11,22 +11,23 @@ def reproduce(env) -> bool:
     """
     pop = env.pop
     device = pop.device
-
-    female_mask = pop.get_sex_mask()
+    
+    female_mask = pop.get_sex_mask().cpu()
     male_mask = ~female_mask
     
     if female_mask.sum() == 0 or male_mask.sum() == 0:
         return True
 
-    # Conversion to numpy for KDTree
+    # Convert to CPU for KDTree
     females_pos = pop.positions[female_mask].cpu().numpy()
     males_pos = pop.positions[male_mask].cpu().numpy()
+    
     tree = KDTree(males_pos)
     distances, neighbors = tree.query(females_pos, k=1)
+    
+    # Move to correct device
     distances = torch.tensor(distances.squeeze(), device=device)
     neighbors = torch.tensor(neighbors.squeeze(), device=device)
-    
-    # Initialisation of conditions
     phenotypes = pop.get_phenotypes()
     radius = phenotypes[female_mask, 1] * env.params['radius_multiplier']
     conditions = torch.ones_like(distances, dtype=torch.bool)
@@ -82,12 +83,12 @@ def reproduce(env) -> bool:
         # Adding new individuals
         new_sex = torch.randint(0, 2, (new_genotypes.shape[0], 1, 2), device=device)
         pop.genotypes = torch.cat([pop.genotypes, torch.cat([new_genotypes, new_sex], dim=1)])
-        pop.positions = torch.cat([pop.positions, (females_pos + males_pos)/2])
+        pop.positions = torch.cat([pop.positions, (females_pos + males_pos) / 2])
         pop.size = pop.genotypes.shape[0]
 
         # Maximal size of population
         if pop.size > env.params['max_population']:
-            if env.params.get('selection_type') == "fitness":
+            if env.params.get('selection_type') == 'fitness':
                 fitness = env.calculate_fitness()
                 _, indices = torch.topk(fitness, env.params['max_population'])
             else:
